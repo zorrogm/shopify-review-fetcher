@@ -3,15 +3,13 @@ import re
 
 def extract_fallback_reviews(soup):
     """
-    Attempt to extract reviews using text-based heuristics if main container fails.
-    Adds safety checks and logs for debugging.
+    Final patched version to prevent all NoneType .parent errors.
     """
     review_blocks = []
     debug_count = 0
 
     for div in soup.find_all("div"):
         try:
-            # Step 1: Find p tags with actual review-like content
             p_tags = div.find_all("p")
             if len(p_tags) >= 2:
                 full_text = " ".join(p.get_text(strip=True) for p in p_tags).lower()
@@ -29,13 +27,16 @@ def extract_fallback_reviews(soup):
                     duration = "N/A"
                     possible_meta = []
 
-                    if name_elem and hasattr(name_elem, "find_parent"):
-                        parent = name_elem.find_parent()
-                        if parent and isinstance(parent, Tag):
-                            meta_divs = parent.find_all("div")
-                            if len(meta_divs) >= 3:
-                                location = meta_divs[1].get_text(strip=True)
-                                duration = meta_divs[2].get_text(strip=True).replace(" using the app", "")
+                    if name_elem:
+                        try:
+                            parent = name_elem.find_parent()
+                            if parent and isinstance(parent, Tag):
+                                meta_divs = parent.find_all("div")
+                                if len(meta_divs) >= 3:
+                                    location = meta_divs[1].get_text(strip=True)
+                                    duration = meta_divs[2].get_text(strip=True).replace(" using the app", "")
+                        except Exception as inner_e:
+                            print(f"[fallback_parser] Meta parse failed: {inner_e}")
 
                     review_blocks.append({
                         "review": full_text,
@@ -47,7 +48,7 @@ def extract_fallback_reviews(soup):
                     })
         except Exception as e:
             debug_count += 1
-            print(f"[fallback_parser] Block {debug_count} skipped due to error: {e}")
+            print(f"[fallback_parser] Block {debug_count} skipped: {e}")
             continue
 
     print(f"[fallback_parser] Parsed {len(review_blocks)} valid reviews with fallback")
