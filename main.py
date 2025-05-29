@@ -22,6 +22,7 @@ if st.button("Fetch Reviews"):
     if not url:
         st.warning("⚠️ Please enter a valid Shopify App or Partner URL.")
     else:
+        st.info("📡 Please wait while we check Shopify's layout... attempting review scan if needed.")
         with st.spinner("🕒 Fetching reviews... This may take 1–3 minutes depending on volume. Please do not close this window."):
             try:
                 if option == "Single App Reviews":
