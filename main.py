@@ -1,25 +1,23 @@
-
 import streamlit as st
-from datetime import datetime
+import datetime
 from scraper.single_app import scrape_single_app
 from scraper.partner_apps import scrape_partner_apps
 
 st.set_page_config(page_title="Shopify Review Fetcher", layout="centered")
+st.image("assets/cedlogo.png", width=200)
 
-st.image("assets/cedlogo.png", width=250)
+st.title("📦 Shopify Review Fetcher")
+st.markdown("Easily fetch reviews from a single Shopify app or all apps from a partner page.")
 
-st.title("Shopify App Review Fetcher")
+mode = st.radio("Choose Mode", ["Single App", "Partner Page"])
 
-mode = st.radio("Select Mode", ["Single App", "Partner’s All Apps"])
+url = st.text_input("🔗 Enter the Shopify App or Partner URL")
+start_date = st.date_input("Start Date", value=datetime.date(2024, 1, 1))
+end_date = st.date_input("End Date", value=datetime.date.today())
 
-url = st.text_input("Enter the Shopify App or Partner URL")
-
-start_date = st.date_input("Start Date", datetime(2024, 1, 1))
-end_date = st.date_input("End Date", datetime.now())
-
-if st.button("Fetch Reviews"):
-    if not url:
-        st.error("Please enter a valid URL.")
+if st.button("🚀 Fetch Reviews"):
+    if not url.strip():
+        st.warning("Please enter a valid URL.")
     else:
         with st.spinner("📡 Please wait while we check Shopify's layout... attempting review scan if needed."):
             try:
@@ -29,12 +27,9 @@ if st.button("Fetch Reviews"):
                     reviews = scrape_partner_apps(url, start_date, end_date)
 
                 if not reviews:
-                    st.warning("No reviews found for the given filters.")
+                    st.error("No reviews found or unsupported structure. Please verify the URL.")
                 else:
-                    st.success("✅ Reviews fetched successfully. Click below to download.")
-                    csv_data = "app_name,review,reviewer,date,rating,duration,location\n"
-                    for review in reviews:
-                        csv_data += f"{review.get('app_name','')},{review.get('review','').replace(',', ' ')},{review.get('reviewer','')},{review.get('date','')},{review.get('rating','')},{review.get('duration','')},{review.get('location','')}\n"
-                    st.download_button("Download CSV", csv_data.encode("utf-8"), "shopify_reviews.csv", "text/csv")
+                    st.success(f"✅ {len(reviews)} reviews fetched!")
+                    st.download_button("📥 Download CSV", data=reviews.to_csv(index=False), file_name="shopify_reviews.csv", mime="text/csv")
             except Exception as e:
                 st.error(f"🚨 An error occurred: {e}")
