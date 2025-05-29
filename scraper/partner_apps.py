@@ -1,105 +1,85 @@
 import requests
 from bs4 import BeautifulSoup
-from bs4 import Tag
-import pandas as pd
 from datetime import datetime
 import time
-import random
-from .dom_agent import auto_detect_review_blocks
-
-def extract_rating(review):
-    rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
-    if rating_div and 'aria-label' in rating_div.attrs:
-        try:
-            return rating_div['aria-label'].split(' ')[0]
-        except IndexError:
-            return None
-    return None
+from .fallback_parser import extract_fallback_reviews
 
 def parse_review_date(date_str):
     if 'Edited' in date_str:
         date_str = date_str.split('Edited')[1].strip()
     else:
-        date_str = date_str.split('Edited')[0].strip()
+        date_str = date_str.strip()
     try:
         return datetime.strptime(date_str, '%B %d, %Y')
     except ValueError:
         return None
 
-def fetch_shopify_apps(base_url):
-    apps = []
-    response = requests.get(base_url)
+def scrape_partner_apps(partner_url, start_date, end_date):
+    response = requests.get(partner_url)
     soup = BeautifulSoup(response.content, 'html.parser')
-    divs = soup.select('div.tw-text-body-sm.tw-font-link')
-    for div in divs:
-        app_name = div.find('a').text.strip()
-        app_url = div.find('a')['href']
-        if not app_url.startswith('http'):
-            app_url = f"https://apps.shopify.com{app_url}"
-        apps.append({'name': app_name, 'url': app_url})
-    return apps
+    app_links = [a['href'] for a in soup.find_all('a', href=True) if '/apps/' in a['href'] and '/reviews' not in a['href']]
+    app_links = list(set(app_links))
 
-def scrape_partner_apps(base_url, start_date, end_date):
-    apps = fetch_shopify_apps(base_url)
     all_reviews = []
-    for app in apps:
-        app_reviews = []
-        base_app_url = app['url'].split('?')[0]
+
+    for link in app_links:
+        full_url = f"https://apps.shopify.com{link}/reviews?sort_by=newest"
         page = 1
         while True:
-            reviews_url = f"{base_app_url}/reviews?sort_by=newest&page={page}"
-            response = requests.get(reviews_url)
-            soup = BeautifulSoup(response.content, 'html.parser')
+            page_url = f"{full_url}&page={page}"
+            res = requests.get(page_url)
+            soup = BeautifulSoup(res.content, 'html.parser')
             review_divs = soup.find_all("div", attrs={"data-merchant-review": True})
-            if not review_divs:
-                print("⚠️ Shopify layout may have changed. Attempting fallback detection...")
-                review_divs = auto_detect_review_blocks(soup)
 
             if not review_divs:
+                print(f"⚠️ Fallback triggered for app: {link}")
+                fallback_reviews = extract_fallback_reviews(soup)
+                for r in fallback_reviews:
+                    r["app_name"] = link.split("/")[-1]
+                    all_reviews.append(r)
                 break
 
-            has_recent_reviews = False
-            for review_div in review_divs:
-                review_text_div = review_div.find('div', {'data-truncate-content-copy': True})
-                review_text = review_text_div.find('p').text.strip() if review_text_div else "No review text"
+            stop = False
+            for div in review_divs:
+                try:
+                    text_block = div.find('div', {'data-truncate-content-copy': True})
+                    review_text = " ".join(p.text.strip() for p in text_block.find_all('p')) if text_block else "N/A"
 
-                reviewer_name_div = review_div.find('div', class_='tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
-                reviewer_name = reviewer_name_div.text.strip() if reviewer_name_div else "No reviewer name"
+                    rating_div = div.find("div", {"role": "img"})
+                    rating = rating_div["aria-label"].split(" ")[0] if rating_div and "aria-label" in rating_div.attrs else "N/A"
 
-                review_date_div = review_div.find('div', class_='tw-text-body-xs tw-text-fg-tertiary')
-                review_date_str = review_date_div.text.strip() if review_date_div else "No review date"
+                    name_div = div.find('div', class_='tw-text-heading-xs')
+                    reviewer_name = name_div.text.strip() if name_div else "N/A"
 
-                reviewer_and_location_div = reviewer_name_div.parent
-                reviewer_and_location_div_children = [child for child in reviewer_and_location_div.contents if isinstance(child, Tag)]
-                location = reviewer_and_location_div_children[1].text.strip() if len(reviewer_and_location_div_children) > 1 else 'N/A'
-                duration = reviewer_and_location_div_children[2].text.strip() if len(reviewer_and_location_div_children) > 2 else 'N/A'
-                if duration.endswith(' using the app'):
-                    duration = duration[:-len(' using the app')]
+                    location, duration = 'N/A', 'N/A'
+                    if name_div and name_div.parent:
+                        meta_divs = [d for d in name_div.parent.find_all('div') if isinstance(d, Tag)]
+                        if len(meta_divs) >= 3:
+                            location = meta_divs[1].text.strip()
+                            duration = meta_divs[2].text.strip().replace(" using the app", "")
 
-                rating = extract_rating(review_div)
-                review_date = parse_review_date(review_date_str)
+                    date_div = div.find('div', class_='tw-text-body-xs')
+                    review_date_str = date_div.text.strip() if date_div else "N/A"
+                    review_date = parse_review_date(review_date_str)
 
-                if review_date is None:
+                    if review_date and start_date <= review_date <= end_date:
+                        all_reviews.append({
+                            'app_name': link.split('/')[-1],
+                            'review': review_text,
+                            'reviewer': reviewer_name,
+                            'date': review_date_str,
+                            'location': location,
+                            'duration': duration,
+                            'rating': rating
+                        })
+                    elif review_date and review_date < end_date:
+                        stop = True
+                        break
+                except Exception:
                     continue
-                if review_date > start_date:
-                    has_recent_reviews = True
-                    continue
-                elif start_date >= review_date >= end_date:
-                    app_reviews.append({
-                        'app_name': app['name'],
-                        'review': review_text,
-                        'reviewer': reviewer_name,
-                        'date': review_date_str,
-                        'location': location,
-                        'duration': duration,
-                        'rating': rating
-                    })
-                    has_recent_reviews = True
-                else:
-                    break
-            if not has_recent_reviews:
+            if stop:
                 break
             page += 1
-            time.sleep(random.uniform(1.2, 3.0))
-        all_reviews.extend(app_reviews)
+            time.sleep(1)
+
     return all_reviews
