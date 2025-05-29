@@ -1,4 +1,3 @@
-
 from bs4 import BeautifulSoup
 
 def extract_fallback_reviews(html):
