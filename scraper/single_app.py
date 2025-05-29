@@ -4,7 +4,6 @@ from bs4 import Tag
 import pandas as pd
 from datetime import datetime
 import time
-from .dom_agent import auto_detect_review_blocks
 
 def extract_rating(review):
     rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
@@ -26,6 +25,7 @@ def parse_review_date(date_str):
         return None
 
 def scrape_single_app(app_url, start_date, end_date):
+    from .dom_agent import auto_detect_review_blocks
     base_url = app_url.split('?')[0]
     page = 1
     reviews = []
@@ -34,9 +34,7 @@ def scrape_single_app(app_url, start_date, end_date):
         reviews_url = f"{base_url}/reviews?sort_by=newest&page={page}"
         response = requests.get(reviews_url)
         soup = BeautifulSoup(response.content, 'html.parser')
-
-        # Intentionally broken selector to simulate DOM change
-        review_divs = soup.find_all("div", attrs={"wrong-attribute": True})
+        review_divs = soup.find_all("div", attrs={"data-merchant-review": True})
         if not review_divs:
             print("⚠️ Shopify layout may have changed. Attempting fallback detection...")
             review_divs = auto_detect_review_blocks(soup)
