@@ -25,8 +25,11 @@ def extract_fallback_reviews(soup):
 
                     location = "N/A"
                     duration = "N/A"
-
-                    possible_meta = name_elem.find_parent().find_all("div") if name_elem else []
+                    possible_meta = []
+                    if name_elem:
+                        parent = name_elem.find_parent()
+                        if parent:
+                            possible_meta = parent.find_all("div")
                     if len(possible_meta) >= 3:
                         location = possible_meta[1].get_text(strip=True)
                         duration = possible_meta[2].get_text(strip=True).replace(" using the app", "")
