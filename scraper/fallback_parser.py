@@ -4,17 +4,19 @@ import re
 def extract_fallback_reviews(soup):
     """
     Attempt to extract reviews using text-based heuristics if main container fails.
+    Adds safety checks and logs for debugging.
     """
     review_blocks = []
+    debug_count = 0
 
     for div in soup.find_all("div"):
         try:
-            # Look for blocks with multiple <p> tags and keywords in text
+            # Step 1: Find p tags with actual review-like content
             p_tags = div.find_all("p")
             if len(p_tags) >= 2:
                 full_text = " ".join(p.get_text(strip=True) for p in p_tags).lower()
                 if any(k in full_text for k in ["support", "app", "feature", "integration", "problem", "recommend"]):
-                    rating_elem = div.find("div", {"role": "img", "aria-label": re.compile(r"\\d out of 5 stars")})
+                    rating_elem = div.find("div", {"role": "img", "aria-label": re.compile(r"\d out of 5 stars")})
                     rating = rating_elem["aria-label"].split(" ")[0] if rating_elem else "N/A"
 
                     date_elem = div.find("div", class_=re.compile("tw-text-body-xs"))
@@ -26,7 +28,8 @@ def extract_fallback_reviews(soup):
                     location = "N/A"
                     duration = "N/A"
                     possible_meta = []
-                    if name_elem:
+
+                    if name_elem and hasattr(name_elem, "find_parent"):
                         parent = name_elem.find_parent()
                         if parent and isinstance(parent, Tag):
                             meta_divs = parent.find_all("div")
@@ -42,7 +45,10 @@ def extract_fallback_reviews(soup):
                         "location": location,
                         "duration": duration
                     })
-        except Exception:
+        except Exception as e:
+            debug_count += 1
+            print(f"[fallback_parser] Block {debug_count} skipped due to error: {e}")
             continue
 
+    print(f"[fallback_parser] Parsed {len(review_blocks)} valid reviews with fallback")
     return review_blocks
