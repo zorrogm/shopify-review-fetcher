@@ -5,13 +5,13 @@ import pandas as pd
 from datetime import datetime
 import time
 import random
+from .dom_agent import auto_detect_review_blocks
 
 def extract_rating(review):
     rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
     if rating_div and 'aria-label' in rating_div.attrs:
-        aria_label = rating_div['aria-label']
         try:
-            return aria_label.split(' ')[0]
+            return rating_div['aria-label'].split(' ')[0]
         except IndexError:
             return None
     return None
@@ -52,7 +52,12 @@ def scrape_partner_apps(base_url, start_date, end_date):
             soup = BeautifulSoup(response.content, 'html.parser')
             review_divs = soup.find_all("div", attrs={"data-merchant-review": True})
             if not review_divs:
+                print("⚠️ Shopify layout may have changed. Attempting fallback detection...")
+                review_divs = auto_detect_review_blocks(soup)
+
+            if not review_divs:
                 break
+
             has_recent_reviews = False
             for review_div in review_divs:
                 review_text_div = review_div.find('div', {'data-truncate-content-copy': True})
@@ -79,7 +84,7 @@ def scrape_partner_apps(base_url, start_date, end_date):
                 if review_date > start_date:
                     has_recent_reviews = True
                     continue
-                elif review_date is not None and start_date >= review_date >= end_date:
+                elif start_date >= review_date >= end_date:
                     app_reviews.append({
                         'app_name': app['name'],
                         'review': review_text,
