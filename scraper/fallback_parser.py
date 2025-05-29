@@ -14,7 +14,7 @@ def extract_fallback_reviews(soup):
             if len(p_tags) >= 2:
                 full_text = " ".join(p.get_text(strip=True) for p in p_tags).lower()
                 if any(k in full_text for k in ["support", "app", "feature", "integration", "problem", "recommend"]):
-                    rating_elem = div.find("div", {"role": "img", "aria-label": re.compile(r"\d out of 5 stars")})
+                    rating_elem = div.find("div", {"role": "img", "aria-label": re.compile(r"\\d out of 5 stars")})
                     rating = rating_elem["aria-label"].split(" ")[0] if rating_elem else "N/A"
 
                     date_elem = div.find("div", class_=re.compile("tw-text-body-xs"))
@@ -28,11 +28,11 @@ def extract_fallback_reviews(soup):
                     possible_meta = []
                     if name_elem:
                         parent = name_elem.find_parent()
-                        if parent:
-                            possible_meta = parent.find_all("div")
-                    if len(possible_meta) >= 3:
-                        location = possible_meta[1].get_text(strip=True)
-                        duration = possible_meta[2].get_text(strip=True).replace(" using the app", "")
+                        if parent and isinstance(parent, Tag):
+                            meta_divs = parent.find_all("div")
+                            if len(meta_divs) >= 3:
+                                location = meta_divs[1].get_text(strip=True)
+                                duration = meta_divs[2].get_text(strip=True).replace(" using the app", "")
 
                     review_blocks.append({
                         "review": full_text,
