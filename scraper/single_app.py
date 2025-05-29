@@ -35,7 +35,6 @@ def scrape_single_app(app_url, start_date, end_date):
         response = requests.get(reviews_url)
         soup = BeautifulSoup(response.content, 'html.parser')
         review_divs = soup.find_all("div", attrs={"data-merchant-review": True})
-
         if not review_divs:
             break
 

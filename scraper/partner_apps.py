@@ -6,19 +6,6 @@ from datetime import datetime
 import time
 import random
 
-def fetch_shopify_apps(base_url):
-    apps = []
-    response = requests.get(base_url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    divs = soup.select('div.tw-text-body-sm.tw-font-link')
-    for div in divs:
-        app_name = div.find('a').text.strip()
-        app_url = div.find('a')['href']
-        if not app_url.startswith('http'):
-            app_url = f"https://apps.shopify.com{app_url}"
-        apps.append({'name': app_name, 'url': app_url})
-    return apps
-
 def extract_rating(review):
     rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
     if rating_div and 'aria-label' in rating_div.attrs:
@@ -38,6 +25,19 @@ def parse_review_date(date_str):
         return datetime.strptime(date_str, '%B %d, %Y')
     except ValueError:
         return None
+
+def fetch_shopify_apps(base_url):
+    apps = []
+    response = requests.get(base_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    divs = soup.select('div.tw-text-body-sm.tw-font-link')
+    for div in divs:
+        app_name = div.find('a').text.strip()
+        app_url = div.find('a')['href']
+        if not app_url.startswith('http'):
+            app_url = f"https://apps.shopify.com{app_url}"
+        apps.append({'name': app_name, 'url': app_url})
+    return apps
 
 def scrape_partner_apps(base_url, start_date, end_date):
     apps = fetch_shopify_apps(base_url)
