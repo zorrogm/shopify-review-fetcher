@@ -1,91 +1,64 @@
 import requests
 from bs4 import BeautifulSoup
-from bs4 import Tag
 import pandas as pd
-from datetime import datetime
 import time
-from .dom_agent import auto_detect_review_blocks
+from datetime import datetime
 
-def extract_rating(review):
-    rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
-    if rating_div and 'aria-label' in rating_div.attrs:
-        try:
-            return rating_div['aria-label'].split(' ')[0]
-        except IndexError:
-            return None
-    return None
+def scrape_single_app(url, start_date, end_date):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
+    }
+    if "/reviews" not in url:
+        url = url.rstrip("/") + "/reviews"
 
-def parse_review_date(date_str):
-    if 'Edited' in date_str:
-        date_str = date_str.split('Edited')[1].strip()
-    else:
-        date_str = date_str.split('Edited')[0].strip()
-    try:
-        return datetime.strptime(date_str, '%B %d, %Y')
-    except ValueError:
-        return None
-
-def scrape_single_app(app_url, start_date, end_date):
-    base_url = app_url.split('?')[0]
+    all_reviews = []
     page = 1
-    reviews = []
 
     while True:
-        reviews_url = f"{base_url}/reviews?sort_by=newest&page={page}"
-        response = requests.get(reviews_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # Intentionally broken selector to simulate DOM change
-        review_divs = soup.find_all("div", attrs={"wrong-attribute": True})
-        if not review_divs:
-            print("⚠️ Shopify layout may have changed. Attempting fallback detection...")
-            review_divs = auto_detect_review_blocks(soup)
-
-        if not review_divs:
+        paginated_url = f"{url}?page={page}&sort_by=newest"
+        response = requests.get(paginated_url, headers=headers)
+        if response.status_code != 200:
             break
 
-        has_recent_reviews = False
-        for review_div in review_divs:
-            review_text_div = review_div.find('div', {'data-truncate-content-copy': True})
-            review_text = review_text_div.find('p').text.strip() if review_text_div else "No review text"
+        soup = BeautifulSoup(response.text, "html.parser")
+        review_blocks = soup.find_all("div", class_="tw-pb-md md:tw-pb-lg tw-mb-md md:tw-mb-lg tw-pt-0 last:tw-pb-0 ")
+        if not review_blocks:
+            break
 
-            reviewer_name_div = review_div.find('div', class_='tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
-            reviewer_name = reviewer_name_div.text.strip() if reviewer_name_div else "No reviewer name"
+        for block in review_blocks:
+            try:
+                date_text = block.find("div", class_="tw-text-body-xs tw-text-fg-tertiary").text.strip()
+                review_date = datetime.strptime(date_text, "%B %d, %Y")
+                if review_date.date() < start_date or review_date.date() > end_date:
+                    continue
 
-            reviewer_and_location_div = reviewer_name_div.parent
-            reviewer_and_location_div_children = [child for child in reviewer_and_location_div.contents if isinstance(child, Tag)]
-            location = reviewer_and_location_div_children[1].text.strip() if len(reviewer_and_location_div_children) > 1 else 'N/A'
-            duration = reviewer_and_location_div_children[2].text.strip() if len(reviewer_and_location_div_children) > 2 else 'N/A'
-            if duration.endswith(' using the app'):
-                duration = duration[:-len(' using the app')]
+                rating_label = block.find("div", class_="tw-flex tw-items-center tw-justify-between tw-mb-md").find("div", attrs={"aria-label": True})
+                rating = rating_label["aria-label"].split(" out")[0] if rating_label else "NA"
 
-            review_date_div = review_div.find('div', class_='tw-text-body-xs tw-text-fg-tertiary')
-            review_date_str = review_date_div.text.strip() if review_date_div else "No review date"
-            rating = extract_rating(review_div)
-            review_date = parse_review_date(review_date_str)
+                review = block.find("div", {"data-truncate-review": True}).text.strip()
 
-            if review_date is None:
-                continue
-            if review_date > start_date:
-                has_recent_reviews = True
-                continue
-            elif start_date >= review_date >= end_date:
-                reviews.append({
-                    'app_name': app_url.split('/')[-1],
-                    'review': review_text,
-                    'reviewer': reviewer_name,
-                    'date': review_date_str,
-                    'location': location,
-                    'duration': duration,
-                    'rating': rating
+                reviewer = block.find("div", class_="tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap")
+                reviewer = reviewer.text.strip() if reviewer else "NA"
+
+                misc_data = block.find_all("div", class_="tw-order-2 lg:tw-order-1 lg:tw-row-span-2 tw-mt-md md:tw-mt-0 tw-space-y-1 md:tw-space-y-2 tw-text-fg-tertiary  tw-text-body-xs")
+                location = duration = "NA"
+                if misc_data and len(misc_data[0].find_all("div")) > 2:
+                    data_divs = misc_data[0].find_all("div")
+                    location = data_divs[1].text.strip()
+                    duration = data_divs[2].text.strip()
+
+                all_reviews.append({
+                    "reviewer": reviewer,
+                    "date": review_date.strftime("%B %d, %Y"),
+                    "location": location,
+                    "duration": duration,
+                    "rating": rating,
+                    "review": review
                 })
-                has_recent_reviews = True
-            else:
-                break
+            except Exception:
+                continue
 
-        if not has_recent_reviews:
-            break
         page += 1
         time.sleep(1)
 
-    return reviews
+    return pd.DataFrame(all_reviews)
