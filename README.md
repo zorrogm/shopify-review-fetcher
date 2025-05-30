@@ -15,4 +15,4 @@ This tool fetches reviews from Shopify App Store for:
 ## Deployment
 - Push to GitHub
 - Connect to Streamlit Cloud
-- Set `app.py` as entry point
+- Set `main.py` as entry point
