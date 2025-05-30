@@ -2,6 +2,22 @@ import requests
 from bs4 import BeautifulSoup, Tag
 from datetime import datetime
 import time
+import random
+
+def fetch_shopify_apps(base_url):
+    apps = []
+    response = requests.get(base_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    divs = soup.select('div.tw-text-body-sm.tw-font-link')
+
+    for div in divs:
+        app_name = div.find('a').text.strip()
+        app_url = div.find('a')['href']
+        if not app_url.startswith('http'):
+            app_url = f"https://apps.shopify.com{app_url}"
+        apps.append({'name': app_name, 'url': app_url})
+
+    return apps
 
 def extract_rating(review):
     rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
@@ -23,7 +39,7 @@ def parse_review_date(date_str):
     except ValueError:
         return None
 
-def fetch_reviews(app_url, app_name, start_date, end_date, debug=False):
+def fetch_reviews(app_url, app_name, start_date, end_date):
     base_url = app_url.split('?')[0]
     page = 1
     reviews = []
@@ -46,6 +62,9 @@ def fetch_reviews(app_url, app_name, start_date, end_date, debug=False):
             reviewer_name_div = review_div.find('div', class_='tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
             reviewer_name = reviewer_name_div.text.strip() if reviewer_name_div else "No reviewer name"
 
+            review_date_div = review_div.find('div', class_='tw-text-body-xs tw-text-fg-tertiary')
+            review_date_str = review_date_div.text.strip() if review_date_div else "No review date"
+
             reviewer_and_location_div = reviewer_name_div.parent
             children = [child for child in reviewer_and_location_div.contents if isinstance(child, Tag)]
             location = children[1].text.strip() if len(children) > 1 else 'N/A'
@@ -54,14 +73,12 @@ def fetch_reviews(app_url, app_name, start_date, end_date, debug=False):
             if duration.endswith(' using the app'):
                 duration = duration[:-len(' using the app')]
 
-            review_date_div = review_div.find('div', class_='tw-text-body-xs tw-text-fg-tertiary')
-            review_date_str = review_date_div.text.strip() if review_date_div else "No review date"
-
             rating = extract_rating(review_div)
             review_date = parse_review_date(review_date_str)
 
             if review_date and review_date > start_date:
                 has_recent_reviews = True
+                continue
             elif review_date and start_date >= review_date >= end_date:
                 reviews.append({
                     'app_name': app_name,
@@ -80,6 +97,6 @@ def fetch_reviews(app_url, app_name, start_date, end_date, debug=False):
             break
 
         page += 1
-        time.sleep(1)
+        time.sleep(random.uniform(1.2, 3.0))
 
     return reviews
