@@ -1,17 +1,18 @@
 # Shopify Review Fetcher
 
-A simple Streamlit app to fetch reviews from the Shopify App Store.
+This tool fetches reviews from Shopify App Store for:
 
-## Features
-- Choose between scraping a single app or all apps under a partner
-- Set date range
-- Download results as CSV
+- A single app using its direct URL
+- All apps under a specific Shopify Partner profile
 
-## Setup
+## How to Use
 
-```bash
-pip install -r requirements.txt
-streamlit run main.py
-```
+1. Enter the URL
+2. Select review type
+3. Choose date range
+4. Click “Fetch Reviews” to preview and download
 
-## Created: 2025-05-28
+## Deployment
+- Push to GitHub
+- Connect to Streamlit Cloud
+- Set `app.py` as entry point
